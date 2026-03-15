@@ -3,4 +3,16 @@ name = "brook-http-worker"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "brook_http_worker"
+path = "src/worker.rs"
+
+[[bin]]
+name="worker"
+path="examples/worker-1.rs"
+
 [dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+beanstalkc = "^1.0.0"
+redis = "1.0.5"

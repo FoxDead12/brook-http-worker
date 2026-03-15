@@ -1,0 +1,9 @@
+# Configuration of workers (for now any worker will use)
+
+beanstalkd:
+  host: "127.0.0.1"
+  port: 11301
+
+redis:
+  host: "127.0.0.1"
+  port: 6380
