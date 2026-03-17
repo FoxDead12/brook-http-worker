@@ -3,6 +3,7 @@ use std::{env, fs};
 use std::process::exit;
 use beanstalkc::{Beanstalkc};
 use serde::Deserialize;
+use job;
 
 #[derive(Deserialize, Debug)]
 struct BeanstalkdConfig {
@@ -26,14 +27,7 @@ pub struct RustWorker {
   _config: RustWorkerConfig,
   _beanstalkd: Beanstalkc,
   _redis: redis::Connection,
-  _handlers: HashMap<String, Box<dyn JobHandler>>,
-}
-
-/**
- * Interface to job struct all jobs will use this methods
- */
-pub trait JobHandler: Send + Sync {
-  fn handle(&self);
+  _handlers: HashMap<String, Box<dyn job::JobHandler>>,
 }
 
 impl RustWorker {
@@ -68,7 +62,7 @@ impl RustWorker {
   /**
    * Add jobs logics
    */
-  pub fn register_job<H: JobHandler + 'static>(&mut self, tube: &str, handler: H) {
+  pub fn register_job<H: job::JobHandler + 'static>(&mut self, tube: &str, handler: H) {
     // Fazemos o watch do tubo automaticamente ao registar
     self._beanstalkd.watch(tube).expect("Can't watch tube");
     self._handlers.insert(tube.to_string(), Box::new(handler));
