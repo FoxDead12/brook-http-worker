@@ -1,23 +1,20 @@
-use brook_http_worker::{RustWorker, JobHandler};
+use brook_http_worker::worker::Worker;
+use brook_http_worker::job::{JobAbstract, Job};
 
+struct MyHttpJob;
+impl JobAbstract for MyHttpJob {
+  fn setup(&self, _job: Job) {
 
-/**
- * Job implementation can be a new file
- */
+  }
 
-struct ThirdJob;
-
-impl JobHandler for ThirdJob {
-  fn handle (&self) {
-    println!("HEIIIIII ENTREI NO MEU JOB");
+  fn perform(&self) {
+    println!("Fazendo algo!");
   }
 }
 
-
-
 // ... worker examle can be another file ...
 fn main () {
-  let mut worker = RustWorker::new();
-  worker.register_job("third-job", ThirdJob);
-  worker.start();
+  let mut w= Worker::new();
+  w.add_job("third-job", MyHttpJob);
+  w.start();
 }
