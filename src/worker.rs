@@ -1,15 +1,29 @@
 pub mod job {
   use beanstalkc::Beanstalkc;
+use redis::Commands;
 
-  pub struct Job {
-    _beanstalkd: Beanstalkc,
-    _redis: redis::Connection
+  pub struct Job<'a> {
+    pub _job_id: u64,
+
+    pub _beanstalkd: &'a mut Beanstalkc,
+    pub _redis: &'a mut redis::Connection
   }
 
   pub trait JobAbstract  {
-    fn setup(&self, _job: Job);
-    fn perform(&self) {
-      println!("Method perform need be defined in struct impl");
+    fn perform (&self, _job: Job);
+    fn success_response (&self, _job: Job, message: String) {
+
+      // {
+      //   job_id: 123
+      //   headers: {}
+      //   payload: {}
+      // }
+
+      // match _job._redis.publish(channel, mensagem) {
+      //   Ok(receivers) => println!("Mensagem enviada! {} inscritos receberam.", receivers),
+      //   Err(e) => eprintln!("Erro ao enviar publish: {}", e),
+      // }
+
     }
   }
 }
@@ -21,7 +35,7 @@ pub mod worker {
   use std::env;
   use std::fs;
   use std::process::exit;
-  use crate::job::JobAbstract;
+  use crate::job::{JobAbstract, Job};
 
   pub struct Worker {
     _config: WorkerConfig,
@@ -107,9 +121,11 @@ pub mod worker {
         // ... reserve job ...
         match self._beanstalkd.reserve() {
           Ok(job) => {
+
             // ... job has been reserve ...
             let job_id = job.id();
             let job_body = job.body().to_vec();
+
             match self._beanstalkd.stats_job(job_id) {
               Ok(stats) => {
                 // ... get tube of job ...
@@ -119,8 +135,23 @@ pub mod worker {
                 };
 
                 eprintln!("Job recebido do tubo {:?} com id {} e o seguinte body: {:?}", tube, job_id, job_body);
+
+                // ... get struct of job and execute logic ...
                 if let Some(_job) = self._jobs.get(tube) {
-                  _job.perform();
+                  let _job_s = Job {
+                    _job_id: job_id,
+                    _beanstalkd: &mut self._beanstalkd,
+                    _redis: &mut self._redis
+                  };
+
+                  _job.perform(_job_s);
+                }
+
+                match self._beanstalkd.delete(job_id) {
+                  Ok(_) => {},
+                  Err(e) => {
+                    eprintln!("Falha ao apagar job: {:?}", e);
+                  }
                 }
 
               },
