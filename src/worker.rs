@@ -1,191 +1,138 @@
 pub mod job {
-  use beanstalkc::Beanstalkc;
-use redis::Commands;
+    use beanstalkc::Beanstalkc;
+    use redis::{Commands, Connection};
+    use serde::Serialize;
 
-  pub struct Job<'a> {
-    pub _job_id: u64,
-
-    pub _beanstalkd: &'a mut Beanstalkc,
-    pub _redis: &'a mut redis::Connection
-  }
-
-  pub trait JobAbstract  {
-    fn perform (&self, _job: Job);
-    fn success_response (&self, _job: Job, message: String) {
-
-      // {
-      //   job_id: 123
-      //   headers: {}
-      //   payload: {}
-      // }
-
-      // match _job._redis.publish(channel, mensagem) {
-      //   Ok(receivers) => println!("Mensagem enviada! {} inscritos receberam.", receivers),
-      //   Err(e) => eprintln!("Erro ao enviar publish: {}", e),
-      // }
-
+    // Contexto que será injetado no seu job
+    pub struct Job<'a> {
+        pub id: u64,
+        pub channel: String,
+        pub payload: Option<serde_json::Value>,
+        pub beanstalkd: &'a mut Beanstalkc,
+        pub redis: &'a mut Connection,
     }
-  }
+
+    pub trait JobAbstract {
+        fn perform(&self, job: Job);
+
+        // Exemplo de helper comum para todos os jobs
+        fn success_response(&self, job: &mut Job, message: String) {
+
+            let response = JobResponse {
+                job_id: job.id,
+                headers: serde_json::json!({}),
+                payload: serde_json::json!({ "message": message }),
+            };
+
+            match serde_json::to_string(&response) {
+                Ok(json_message) => {
+                    // Clonamos o canal para não conflitar com o &mut job
+                    let channel = job.channel.clone();
+
+                    let _: Result<i32, _> = job.redis.publish(channel, json_message);
+                    println!("Resposta enviada para o canal: {}", job.channel);
+                }
+                Err(e) => eprintln!("Erro ao serializar resposta: {}", e),
+            }
+
+        }
+    }
+
+    #[derive(Serialize)]
+    struct JobResponse { job_id: u64, headers: serde_json::Value, payload: serde_json::Value }
 }
 
 pub mod worker {
-  use beanstalkc::Beanstalkc;
-  use serde::Deserialize;
-  use std::collections::HashMap;
-  use std::env;
-  use std::fs;
-  use std::process::exit;
-  use crate::job::{JobAbstract, Job};
+    use crate::job::{Job, JobAbstract};
+    use beanstalkc::Beanstalkc;
+    use serde::Deserialize;
+    use std::{collections::HashMap, env, fs, thread, time::Duration};
 
-  pub struct Worker {
-    _config: WorkerConfig,
-    _beanstalkd: Beanstalkc,
-    _redis: redis::Connection,
-    _jobs: HashMap<String, Box<dyn JobAbstract>>,
-  }
-
-  impl Worker {
-    pub fn new () -> Self {
-      // ... load configuration ...
-      let mut _config = Self::_configure();
-
-      let mut _beanstalkd = Beanstalkc::new()
-      .host(&_config.beanstalkd.host)
-      .port(_config.beanstalkd.port)
-      .connect()
-      .expect("Can't create beanstalkd client");
-
-      let _redis_url = format!("redis://{}:{}/", _config.redis.host, _config.redis.port);
-      let _redis = redis::Client::open(_redis_url)
-        .expect("Invalid redis URL")
-        .get_connection()
-        .expect("Can't create redis client");
-
-      Worker { _config, _beanstalkd, _redis, _jobs: HashMap::new() }
+    pub struct Worker {
+        beanstalkd: Beanstalkc,
+        redis: redis::Connection,
+        jobs: HashMap<String, Box<dyn JobAbstract>>,
     }
 
-    /**
-     * Load configuration from .yml file
-     *
-     */
-    fn _configure () -> WorkerConfig {
-      // ... get args from script command ...
-      let args: Vec<String> = env::args().collect();
+    impl Worker {
+        pub fn new() -> Self {
+            let config = Self::load_config();
 
-      // ... parse param of command ...
-      let _prop = args.get(1).map(|s| s.as_str()).unwrap_or("");
-      if _prop != "-config" {
-        eprintln!("Usage: bin/worker -config <file_path.yml>");
-        exit(1);
-      }
+            let mut beanstalkd = Beanstalkc::new()
+                .host(&config.beanstalkd.host)
+                .port(config.beanstalkd.port)
+                .connect()
+                .expect("Falha ao conectar no Beanstalkd");
 
-      // ... get path of file ...
-      let _config_path = match args.get(2) {
-        Some(val) => val.clone(),
-        None => {
-          eprintln!("Error: Missing file path for -config");
-          eprintln!("Usage: bin/worker -config <file_path.yml>");
-          exit(1);
+            let redis_url = format!("redis://{}:{}/", config.redis.host, config.redis.port);
+            let redis = redis::Client::open(redis_url)
+                .expect("URL do Redis inválida")
+                .get_connection()
+                .expect("Falha ao conectar no Redis");
+
+            Worker { beanstalkd, redis, jobs: HashMap::new() }
         }
-      };
 
-      // ... parse yml file ...
-      let _yml_string = fs::read_to_string(&_config_path).unwrap_or_else(|_| {
-        eprintln!("Error: Could not read config file at {}", _config_path);
-        exit(1);
-      });
+        fn load_config() -> WorkerConfig {
+            let args: Vec<String> = env::args().collect();
+            let path = args.get(2).expect("Uso: cargo run -- -config config.yml");
+            let content = fs::read_to_string(path).expect("Erro ao ler arquivo de config");
+            serde_yaml::from_str(&content).expect("YAML inválido")
+        }
 
-      // ... convert to lib struct ...
-      let _c: WorkerConfig = serde_yaml::from_str(&_yml_string).unwrap_or_else(|e| {
-        eprintln!("Error: Invalid YAML format: {}", e);
-        exit(1);
-      });
+        pub fn add_job<T: JobAbstract + 'static>(&mut self, tube: &str, job: T) {
+            self.beanstalkd.watch(tube).expect("Erro ao assistir tubo");
+            self.jobs.insert(tube.to_string(), Box::new(job));
+        }
 
-      _c
-    }
+        pub fn start(&mut self) {
+            println!("Worker iniciado. Aguardando jobs...");
+            loop {
+                if let Ok(bean_job) = self.beanstalkd.reserve() {
+                    let id = bean_job.id();
 
-    /**
-     * Method to add tube and job to worker
-     */
-    pub fn add_job<T: JobAbstract + 'static> (&mut self, _tube: &str, _job: T) {
-      self._beanstalkd.watch(_tube).expect("Can't watch tube");
-      self._jobs.insert(_tube.to_string(), Box::new(_job));
-    }
+                    let raw_body = bean_job.body();
 
-    /**
-     * Start event loop to start reserve jobs
-     */
-    pub fn start (&mut self) {
+                    // --- LOG DE DEBUG ---
+                    // String::from_utf8_lossy converte &[u8] para algo legível no console
+                    println!("🔍 [Job ID: {}] Dados brutos recebidos: {}", id, String::from_utf8_lossy(raw_body));
 
-      loop {
-        // ... reserve job ...
-        match self._beanstalkd.reserve() {
-          Ok(job) => {
+                    let parsed: Result<BeanstalkPayload, _> = serde_json::from_slice(bean_job.body());
 
-            // ... job has been reserve ...
-            let job_id = job.id();
-            let job_body = job.body().to_vec();
+                    match parsed {
+                        Ok(data) => {
+                            if let Ok(stats) = self.beanstalkd.stats_job(id) {
+                                let tube = stats.get("tube").map(|s| s.as_str()).unwrap_or("");
 
-            match self._beanstalkd.stats_job(job_id) {
-              Ok(stats) => {
-                // ... get tube of job ...
-                let tube = match stats.get("tube") {
-                  Some(tube) => tube,
-                  None => ""
-                };
+                                if let Some(handler) = self.jobs.get(tube) {
+                                    let context = Job {
+                                        id,
+                                        channel: data.channel,
+                                        payload: data.payload,
+                                        beanstalkd: &mut self.beanstalkd,
+                                        redis: &mut self.redis,
+                                    };
+                                    handler.perform(context);
+                                }
+                            }
+                            let _ = self.beanstalkd.delete(id);
+                        },
+                        Err(e) => {
+                            eprintln!("Erro ao processar JSON do Job {}: {}", id, e);
+                            // Opcional: deletar o job inválido para não travar a fila
+                            let _ = self.beanstalkd.delete(id);
+                        }
+                    }
 
-                eprintln!("Job recebido do tubo {:?} com id {} e o seguinte body: {:?}", tube, job_id, job_body);
-
-                // ... get struct of job and execute logic ...
-                if let Some(_job) = self._jobs.get(tube) {
-                  let _job_s = Job {
-                    _job_id: job_id,
-                    _beanstalkd: &mut self._beanstalkd,
-                    _redis: &mut self._redis
-                  };
-
-                  _job.perform(_job_s);
+                    let _ = self.beanstalkd.delete(id);
                 }
-
-                match self._beanstalkd.delete(job_id) {
-                  Ok(_) => {},
-                  Err(e) => {
-                    eprintln!("Falha ao apagar job: {:?}", e);
-                  }
-                }
-
-              },
-              Err(e) => {
-                eprintln!("Falha ao ver o estado do job: {:?}", e);
-              }
+                thread::sleep(Duration::from_millis(10)); // Pequeno fôlego para a CPU
             }
-          },
-          Err(e) => {
-            // ... error reserving job ...
-            eprintln!("Falha ao reservar job (Timeout ou Erro): {:?}", e);
-            std::thread::sleep(std::time::Duration::from_millis(500));
-          }
         }
-      }
     }
 
-  }
-
-  #[derive(Deserialize, Debug)]
-  struct BeanstalkdConfig {
-    host: String,
-    port: u16,
-  }
-
-  #[derive(Deserialize, Debug)]
-  struct RedisConfig {
-    host: String,
-    port: u16,
-  }
-
-  #[derive(Deserialize, Debug)]
-  struct WorkerConfig {
-    beanstalkd: BeanstalkdConfig,
-    redis: RedisConfig,
-  }
+    #[derive(Deserialize)] struct WorkerConfig { beanstalkd: BeanstalkdConfig, redis: RedisConfig }
+    #[derive(Deserialize)] struct BeanstalkdConfig { host: String, port: u16 }
+    #[derive(Deserialize)] struct RedisConfig { host: String, port: u16 }
+    #[derive(Deserialize, Debug)] struct BeanstalkPayload { channel: String, payload: Option<serde_json::Value> }
 }

@@ -14,5 +14,6 @@ path="examples/worker-1.rs"
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
+serde_json = "1.0"
 beanstalkc = "^1.0.0"
 redis = "1.0.5"
