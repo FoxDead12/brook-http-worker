@@ -1,9 +1,13 @@
 use brook_http_worker::worker::Worker;
 use brook_http_worker::job::{Job, JobAbstract};
+use serde::Serialize;
 
-// 1. Defina sua lógica
+#[derive(Serialize)]
+struct OLA {
+    id: u16
+}
+
 struct MyHttpJob;
-
 impl JobAbstract for MyHttpJob {
     fn perform(&self, mut job: Job) {
         // Agora você acessa diretamente!
@@ -16,7 +20,9 @@ impl JobAbstract for MyHttpJob {
         // }
 
         // Resposta via Redis usando o canal que veio no JSON
-        self.success_response(&mut job, "Processado com sucesso".to_string());
+        let meu_dado = OLA { id: 10 };
+
+        self.success_response(&mut job, "Processado com sucesso", Some(serde_json::json!(meu_dado)));
     }
 }
 

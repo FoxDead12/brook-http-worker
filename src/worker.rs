@@ -15,13 +15,18 @@ pub mod job {
     pub trait JobAbstract {
         fn perform(&self, job: Job);
 
-        // Exemplo de helper comum para todos os jobs
-        fn success_response(&self, job: &mut Job, message: String) {
+        fn success_response (&self, job: &mut Job, message: &str, data: Option<serde_json::Value>) {
+            let mut payload_obj = serde_json::json!({ "message": message });
+
+            if let Some(extra) = data {
+                payload_obj["data"] = extra;
+            }
 
             let response = JobResponse {
                 job_id: job.id,
+                status: 200,
                 headers: serde_json::json!({}),
-                payload: serde_json::json!({ "message": message }),
+                payload: payload_obj
             };
 
             match serde_json::to_string(&response) {
@@ -39,7 +44,7 @@ pub mod job {
     }
 
     #[derive(Serialize)]
-    struct JobResponse { job_id: u64, headers: serde_json::Value, payload: serde_json::Value }
+    struct JobResponse { job_id: u64, status: u16, headers: serde_json::Value, payload: serde_json::Value }
 }
 
 pub mod worker {
@@ -58,7 +63,7 @@ pub mod worker {
         pub fn new() -> Self {
             let config = Self::load_config();
 
-            let mut beanstalkd = Beanstalkc::new()
+            let beanstalkd = Beanstalkc::new()
                 .host(&config.beanstalkd.host)
                 .port(config.beanstalkd.port)
                 .connect()
