@@ -35,7 +35,7 @@ pub mod job {
                     let channel = job.channel.clone();
 
                     let _: Result<i32, _> = job.redis.publish(channel, json_message);
-                    println!("Resposta enviada para o canal: {}", job.channel);
+                    // println!("Resposta enviada para o canal: {}", job.channel);
                 }
                 Err(e) => eprintln!("Erro ao serializar resposta: {}", e),
             }
@@ -100,7 +100,7 @@ pub mod worker {
 
                     // --- LOG DE DEBUG ---
                     // String::from_utf8_lossy converte &[u8] para algo legível no console
-                    println!("🔍 [Job ID: {}] Dados brutos recebidos: {}", id, String::from_utf8_lossy(raw_body));
+                    // println!("🔍 [Job ID: {}] Dados brutos recebidos: {}", id, String::from_utf8_lossy(raw_body));
 
                     let parsed: Result<BeanstalkPayload, _> = serde_json::from_slice(bean_job.body());
 
