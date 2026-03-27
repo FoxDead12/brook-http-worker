@@ -15,11 +15,18 @@ pub mod job {
     pub trait JobAbstract {
         fn perform(&self, job: Job);
 
-        fn success_response (&self, job: &mut Job, message: &str, data: Option<serde_json::Value>) {
-            let mut payload_obj = serde_json::json!({ "message": message });
+        fn success_response (&self, job: &mut Job, message: &str, detail: Option<&str>, data: Option<serde_json::Value>) {
+            let mut payload_obj = serde_json::json!({
+                "message": message,
+                "code": 200
+            });
 
             if let Some(extra) = data {
                 payload_obj["data"] = extra;
+            }
+
+            if let Some(extra) = detail {
+                payload_obj["detail"] = serde_json::Value::String(extra.to_string());
             }
 
             let response = JobResponse {
@@ -31,11 +38,8 @@ pub mod job {
 
             match serde_json::to_string(&response) {
                 Ok(json_message) => {
-                    // Clonamos o canal para não conflitar com o &mut job
                     let channel = job.channel.clone();
-
                     let _: Result<i32, _> = job.redis.publish(channel, json_message);
-                    // println!("Resposta enviada para o canal: {}", job.channel);
                 }
                 Err(e) => eprintln!("Erro ao serializar resposta: {}", e),
             }
@@ -67,26 +71,26 @@ pub mod worker {
                 .host(&config.beanstalkd.host)
                 .port(config.beanstalkd.port)
                 .connect()
-                .expect("Falha ao conectar no Beanstalkd");
+                .expect("Failed to establish Beanstlakd connection: Service might be unreachable or credentials are incorrect");
 
             let redis_url = format!("redis://{}:{}/", config.redis.host, config.redis.port);
             let redis = redis::Client::open(redis_url)
-                .expect("URL do Redis inválida")
+                .expect("Invalid Redis connection URL: Please check the connection string format")
                 .get_connection()
-                .expect("Falha ao conectar no Redis");
+                .expect("Failed to establish Redis connection: Service might be unreachable or credentials are incorrect");
 
             Worker { beanstalkd, redis, jobs: HashMap::new() }
         }
 
         fn load_config() -> WorkerConfig {
             let args: Vec<String> = env::args().collect();
-            let path = args.get(2).expect("Uso: cargo run -- -config config.yml");
-            let content = fs::read_to_string(path).expect("Erro ao ler arquivo de config");
-            serde_yaml::from_str(&content).expect("YAML inválido")
+            let path = args.get(2).expect("Usage: cargo run -- -config <config_file.yml>");
+            let content = fs::read_to_string(path).expect("Failed to read configuration file: Check if the path is correct and permissions are set");
+            serde_yaml::from_str(&content).expect("Invalid configuration format: Failed to parse YAML content")
         }
 
         pub fn add_job<T: JobAbstract + 'static>(&mut self, tube: &str, job: T) {
-            self.beanstalkd.watch(tube).expect("Erro ao assistir tubo");
+            self.beanstalkd.watch(tube).expect("Failed to watch tube: Connection lost or invalid tube name provided");
             self.jobs.insert(tube.to_string(), Box::new(job));
         }
 
@@ -95,15 +99,7 @@ pub mod worker {
             loop {
                 if let Ok(bean_job) = self.beanstalkd.reserve() {
                     let id = bean_job.id();
-
-                    let raw_body = bean_job.body();
-
-                    // --- LOG DE DEBUG ---
-                    // String::from_utf8_lossy converte &[u8] para algo legível no console
-                    // println!("🔍 [Job ID: {}] Dados brutos recebidos: {}", id, String::from_utf8_lossy(raw_body));
-
                     let parsed: Result<BeanstalkPayload, _> = serde_json::from_slice(bean_job.body());
-
                     match parsed {
                         Ok(data) => {
                             if let Ok(stats) = self.beanstalkd.stats_job(id) {
@@ -123,15 +119,13 @@ pub mod worker {
                             let _ = self.beanstalkd.delete(id);
                         },
                         Err(e) => {
-                            eprintln!("Erro ao processar JSON do Job {}: {}", id, e);
-                            // Opcional: deletar o job inválido para não travar a fila
+                            eprintln!("Failed to parse JSON payload for Job {}: {}", id, e);
                             let _ = self.beanstalkd.delete(id);
                         }
                     }
 
                     let _ = self.beanstalkd.delete(id);
                 }
-                thread::sleep(Duration::from_millis(10)); // Pequeno fôlego para a CPU
             }
         }
     }
