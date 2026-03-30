@@ -5,7 +5,7 @@ edition = "2024"
 
 [lib]
 name = "brook_http_worker"
-path = "src/worker.rs"
+path = "src/lib.rs"
 
 [[bin]]
 name="worker"
