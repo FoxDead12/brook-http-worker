@@ -52,7 +52,7 @@ pub mod job {
 }
 
 pub mod worker {
-    use crate::job::{Job, JobAbstract};
+    use crate::worker::job::{Job, JobAbstract};
     use beanstalkc::Beanstalkc;
     use serde::Deserialize;
     use std::{collections::HashMap, env, fs, thread, time::Duration};
