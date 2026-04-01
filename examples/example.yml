@@ -7,3 +7,10 @@ beanstalkd:
 redis:
   host: "127.0.0.1"
   port: 6380
+
+postgres:
+  host: "127.0.0.1"
+  port: 5432
+  user: "dx3"
+  password: "root"
+  dbname: "storix"

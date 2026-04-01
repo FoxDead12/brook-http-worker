@@ -2,14 +2,15 @@ pub mod job {
     use beanstalkc::Beanstalkc;
     use redis::{Commands, Connection};
     use serde::Serialize;
+    use postgres::Client as PostgresClient;
 
-    // Contexto que será injetado no seu job
     pub struct Job<'a> {
         pub id: u64,
         pub channel: String,
         pub payload: Option<serde_json::Value>,
         pub beanstalkd: &'a mut Beanstalkc,
         pub redis: &'a mut Connection,
+        pub postgres: &'a mut PostgresClient
     }
 
     pub trait JobAbstract {
@@ -54,12 +55,14 @@ pub mod job {
 pub mod worker {
     use crate::worker::job::{Job, JobAbstract};
     use beanstalkc::Beanstalkc;
+    use postgres::{Client, NoTls};
     use serde::Deserialize;
-    use std::{collections::HashMap, env, fs, thread, time::Duration};
+    use std::{collections::HashMap, env, fs};
 
     pub struct Worker {
         beanstalkd: Beanstalkc,
         redis: redis::Connection,
+        postgres: Client,
         jobs: HashMap<String, Box<dyn JobAbstract>>,
     }
 
@@ -79,7 +82,11 @@ pub mod worker {
                 .get_connection()
                 .expect("Failed to establish Redis connection: Service might be unreachable or credentials are incorrect");
 
-            Worker { beanstalkd, redis, jobs: HashMap::new() }
+            let pg_url = format!("host={} port={} user={} password={} dbname={}", config.postgres.host, config.postgres.port, config.postgres.user, config.postgres.password, config.postgres.dbname );
+            let postgres = Client::connect(&pg_url, NoTls)
+                .expect("Failed to connect to Postgres");
+
+            Worker { beanstalkd, redis, postgres, jobs: HashMap::new() }
         }
 
         fn load_config() -> WorkerConfig {
@@ -112,6 +119,7 @@ pub mod worker {
                                         payload: data.payload,
                                         beanstalkd: &mut self.beanstalkd,
                                         redis: &mut self.redis,
+                                        postgres: &mut self.postgres
                                     };
                                     handler.perform(context);
                                 }
@@ -130,8 +138,9 @@ pub mod worker {
         }
     }
 
-    #[derive(Deserialize)] struct WorkerConfig { beanstalkd: BeanstalkdConfig, redis: RedisConfig }
+    #[derive(Deserialize)] struct WorkerConfig { beanstalkd: BeanstalkdConfig, redis: RedisConfig, postgres: PostgresConfig }
     #[derive(Deserialize)] struct BeanstalkdConfig { host: String, port: u16 }
     #[derive(Deserialize)] struct RedisConfig { host: String, port: u16 }
+    #[derive(Deserialize)] struct PostgresConfig { host: String, port: u16, user: String, password: String, dbname: String }
     #[derive(Deserialize, Debug)] struct BeanstalkPayload { channel: String, payload: Option<serde_json::Value> }
 }

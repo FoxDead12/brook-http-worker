@@ -1,5 +1,5 @@
-use brook_http_worker::worker::Worker;
-use brook_http_worker::job::{Job, JobAbstract};
+use brook_http_worker::worker::worker::Worker;
+use brook_http_worker::worker::job::{Job, JobAbstract};
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize)]
