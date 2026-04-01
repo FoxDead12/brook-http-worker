@@ -44,7 +44,7 @@ pub mod job {
 
             let response = JobResponse {
                 job_id: job.id,
-                status: 200,
+                status: status,
                 headers: serde_json::json!({}),
                 payload: payload_obj
             };
