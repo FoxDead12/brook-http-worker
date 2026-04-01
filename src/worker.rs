@@ -17,9 +17,21 @@ pub mod job {
         fn perform(&self, job: Job);
 
         fn success_response (&self, job: &mut Job, message: &str, detail: Option<&str>, data: Option<serde_json::Value>) {
+            return self.send_response(job, 200, message, detail, data);
+        }
+
+        fn error_response (&self, job: &mut Job, message: &str, detail: Option<&str>, data: Option<serde_json::Value>) {
+            return self.send_response(job, 400, message, detail, data);
+        }
+
+        fn exception_response (&self, job: &mut Job, message: &str, detail: Option<&str>, data: Option<serde_json::Value>) {
+            return self.send_response(job, 500, message, detail, data);
+        }
+
+        fn send_response (&self, job: &mut Job, status: u16, message: &str, detail: Option<&str>, data: Option<serde_json::Value>) {
             let mut payload_obj = serde_json::json!({
                 "message": message,
-                "code": 200
+                "code": status
             });
 
             if let Some(extra) = data {
@@ -44,8 +56,8 @@ pub mod job {
                 }
                 Err(e) => eprintln!("Erro ao serializar resposta: {}", e),
             }
-
         }
+
     }
 
     #[derive(Serialize)]
