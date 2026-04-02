@@ -16,19 +16,19 @@ pub mod job {
     pub trait JobAbstract {
         fn perform(&self, job: Job);
 
-        fn success_response (&self, job: &mut Job, message: &str, detail: Option<&str>, data: Option<serde_json::Value>) {
-            return self.send_response(job, 200, message, detail, data);
+        fn success_response (&self, job: &mut Job, message: &str, detail: Option<&str>, data: Option<serde_json::Value>, headers: Option<serde_json::Value>) {
+            return self.send_response(job, 200, message, detail, data, headers);
         }
 
-        fn error_response (&self, job: &mut Job, message: &str, detail: Option<&str>, data: Option<serde_json::Value>) {
-            return self.send_response(job, 400, message, detail, data);
+        fn error_response (&self, job: &mut Job, message: &str, detail: Option<&str>, data: Option<serde_json::Value>, headers: Option<serde_json::Value>) {
+            return self.send_response(job, 400, message, detail, data, headers);
         }
 
-        fn exception_response (&self, job: &mut Job, message: &str, detail: Option<&str>, data: Option<serde_json::Value>) {
-            return self.send_response(job, 500, message, detail, data);
+        fn exception_response (&self, job: &mut Job, message: &str, detail: Option<&str>, data: Option<serde_json::Value>, headers: Option<serde_json::Value>) {
+            return self.send_response(job, 500, message, detail, data, headers);
         }
 
-        fn send_response (&self, job: &mut Job, status: u16, message: &str, detail: Option<&str>, data: Option<serde_json::Value>) {
+        fn send_response (&self, job: &mut Job, status: u16, message: &str, detail: Option<&str>, data: Option<serde_json::Value>, headers: Option<serde_json::Value>) {
             let mut payload_obj = serde_json::json!({
                 "message": message,
                 "code": status
@@ -45,7 +45,7 @@ pub mod job {
             let response = JobResponse {
                 job_id: job.id,
                 status: status,
-                headers: serde_json::json!({}),
+                headers: headers.unwrap_or_else(|| serde_json::json!({})),
                 payload: payload_obj
             };
 
