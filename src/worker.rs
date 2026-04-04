@@ -75,7 +75,7 @@ pub mod worker {
         beanstalkd: Beanstalkc,
         redis: redis::Connection,
         postgres: Client,
-        jobs: HashMap<String, Box<dyn JobAbstract>>,
+        jobs: HashMap<String, Box<dyn JobAbstract>>
     }
 
     impl Worker {
@@ -97,6 +97,8 @@ pub mod worker {
             let pg_url = format!("host={} port={} user={} password={} dbname={}", config.postgres.host, config.postgres.port, config.postgres.user, config.postgres.password, config.postgres.dbname );
             let postgres = Client::connect(&pg_url, NoTls)
                 .expect("Failed to connect to Postgres");
+
+            crate::logger::init("/Users/dxavier/Developer/brook-http-worker/logs", "wokrer-auth");
 
             Worker { beanstalkd, redis, postgres, jobs: HashMap::new() }
         }
@@ -123,6 +125,9 @@ pub mod worker {
                         Ok(data) => {
                             if let Ok(stats) = self.beanstalkd.stats_job(id) {
                                 let tube = stats.get("tube").map(|s| s.as_str()).unwrap_or("");
+
+                                crate::logger::log("INFO", "Worker iniciado e pronto para tarefas.");
+                                crate::logger::log("DEBUG", "Tarefa processada com sucesso.");
 
                                 if let Some(handler) = self.jobs.get(tube) {
                                     let context = Job {
