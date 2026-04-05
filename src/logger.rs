@@ -36,7 +36,7 @@ pub fn init (log_path: &str, process_name: &str) {
 fn log_file () -> io::Result<File> {
     let config = CONFIG.get().expect("Logger não inicializado. Chame init_logger()");
     let date_str = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let file_name = format!("brook-{}-{}.log", config.process_name, date_str);
+    let file_name = format!("{}-{}.log", config.process_name, date_str);
     let file_path = config.log_dir.join(file_name);
 
     // O_APPEND garante atomicidade na escrita entre diferentes processos
@@ -55,10 +55,10 @@ pub fn log (level: &str, msg: &str) {
 
         // Formatação da linha de log
         let line = format!(
-            "[{}][{}][PID:{}]: {}\n",
+            "[{}][{}][{}]: {}\n",
             now.format("%Y-%m-%dT%H:%M:%S"),
-            level,
             pid,
+            level,
             msg
         );
 

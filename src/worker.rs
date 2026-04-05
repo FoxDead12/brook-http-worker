@@ -98,7 +98,23 @@ pub mod worker {
             let postgres = Client::connect(&pg_url, NoTls)
                 .expect("Failed to connect to Postgres");
 
-            crate::logger::init("/Users/dxavier/Developer/brook-http-worker/logs", "wokrer-auth");
+
+            // ... get executable file name for logger name ...
+            let process_name = match env::current_exe() {
+                Ok(exe_path) => {
+                    exe_path
+                        .file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| "worker-default".to_string())
+                }
+                Err(e) => {
+                    eprintln!("Error getting the executable path: {}", e);
+                    "worker-default".to_string()
+                }
+            };
+
+            // ... init logger
+            crate::logger::init(&config.logger_path, &process_name);
 
             Worker { beanstalkd, redis, postgres, jobs: HashMap::new() }
         }
@@ -116,7 +132,11 @@ pub mod worker {
         }
 
         pub fn start(&mut self) {
-            println!("Worker iniciado. Aguardando jobs...");
+
+            let tubes: Vec<_> = self.jobs.keys().cloned().collect();
+            let tubes_list = tubes.join(", ");
+            crate::logger::log("INFO", format!("worker start listening to current tubes: [{}]", tubes_list).as_str());
+
             loop {
                 if let Ok(bean_job) = self.beanstalkd.reserve() {
                     let id = bean_job.id();
@@ -125,10 +145,7 @@ pub mod worker {
                         Ok(data) => {
                             if let Ok(stats) = self.beanstalkd.stats_job(id) {
                                 let tube = stats.get("tube").map(|s| s.as_str()).unwrap_or("");
-
-                                crate::logger::log("INFO", "Worker iniciado e pronto para tarefas.");
-                                crate::logger::log("DEBUG", "Tarefa processada com sucesso.");
-
+                                crate::logger::log("INFO", format!("~~~~~~ job[id: {}][tube: {}] started ~~~~~~", id, tube).as_str());
                                 if let Some(handler) = self.jobs.get(tube) {
                                     let context = Job {
                                         id,
@@ -140,6 +157,7 @@ pub mod worker {
                                     };
                                     handler.perform(context);
                                 }
+                                crate::logger::log("INFO", format!("~~~~~~ job[id: {}][tube: {}] ended ~~~~~~", id, tube).as_str());
                             }
                             let _ = self.beanstalkd.delete(id);
                         },
@@ -155,7 +173,7 @@ pub mod worker {
         }
     }
 
-    #[derive(Deserialize)] struct WorkerConfig { beanstalkd: BeanstalkdConfig, redis: RedisConfig, postgres: PostgresConfig }
+    #[derive(Deserialize)] struct WorkerConfig { beanstalkd: BeanstalkdConfig, redis: RedisConfig, postgres: PostgresConfig, logger_path: String }
     #[derive(Deserialize)] struct BeanstalkdConfig { host: String, port: u16 }
     #[derive(Deserialize)] struct RedisConfig { host: String, port: u16 }
     #[derive(Deserialize)] struct PostgresConfig { host: String, port: u16, user: String, password: String, dbname: String }
