@@ -144,8 +144,14 @@ pub mod worker {
                     match parsed {
                         Ok(data) => {
                             if let Ok(stats) = self.beanstalkd.stats_job(id) {
+                                // ... save period of job received ...
+                                let time_job_arrive = std::time::Instant::now();
+
+                                // ... get tube of job ...
                                 let tube = stats.get("tube").map(|s| s.as_str()).unwrap_or("");
                                 crate::logger::log("INFO", format!("~~~~~~ job[id: {}][tube: {}] started ~~~~~~", id, tube).as_str());
+
+                                // ... execute logic of job ...
                                 if let Some(handler) = self.jobs.get(tube) {
                                     let context = Job {
                                         id,
@@ -157,7 +163,11 @@ pub mod worker {
                                     };
                                     handler.perform(context);
                                 }
-                                crate::logger::log("INFO", format!("~~~~~~ job[id: {}][tube: {}] ended ~~~~~~", id, tube).as_str());
+
+                                // ... get miliseconds ...
+                                let miliseconds = time_job_arrive.elapsed();
+
+                                crate::logger::log("INFO", format!("~~~~~~ job[id: {}][tube: {}] ended {}ms ~~~~~~", id, tube, miliseconds.as_millis()).as_str());
                             }
                             let _ = self.beanstalkd.delete(id);
                         },
