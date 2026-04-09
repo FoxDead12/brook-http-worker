@@ -9,13 +9,6 @@ struct LoggerConfig {
     process_name: String,
 }
 
-pub enum LoggerLevel {
-    LOG_DEBUG,
-    LOG_INFO,
-    LOG_WARN,
-    LOG_ERR
-}
-
 static CONFIG: OnceLock<LoggerConfig> = OnceLock::new();
 
 pub fn init (log_path: &str, process_name: &str) {
@@ -61,6 +54,11 @@ pub fn log (level: &str, msg: &str) {
             level,
             msg
         );
+
+        if cfg!(debug_assertions) {
+            print!("{}", line);
+            let _ = io::stdout().flush();
+        }
 
         // Escrita atómica (até ao limite do buffer do SO)
         let _ = file.write_all(line.as_bytes());
