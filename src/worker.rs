@@ -154,7 +154,7 @@ pub mod worker {
                                 crate::logger::log("INFO", format!("~~~~~~ job[id: {}][tube: {}] started ~~~~~~", id, tube).as_str());
 
                                 // ... execute logic of job ...
-                                if let Some(handlerdt) = self.jobs.get(tube) {
+                                if let Some(handler) = self.jobs.get(tube) {
                                     let context = Job {
                                         id,
                                         channel: data.channel,
