@@ -10,6 +10,7 @@ pub mod job {
         pub payload: Option<serde_json::Value>,
         pub params: Option<serde_json::Value>,
         pub session: Option<serde_json::Value>,
+        pub options: Option<serde_json::Value>,
         pub beanstalkd: &'a mut Beanstalkc,
         pub redis: &'a mut Connection,
         pub postgres: &'a mut PostgresClient
@@ -161,6 +162,7 @@ pub mod worker {
                                         payload: data.payload,
                                         params: data.params,
                                         session: data.session,
+                                        options: data.options,
                                         beanstalkd: &mut self.beanstalkd,
                                         redis: &mut self.redis,
                                         postgres: &mut self.postgres
@@ -191,5 +193,5 @@ pub mod worker {
     #[derive(Deserialize)] struct BeanstalkdConfig { host: String, port: u16 }
     #[derive(Deserialize)] struct RedisConfig { host: String, port: u16 }
     #[derive(Deserialize)] struct PostgresConfig { host: String, port: u16, user: String, password: String, dbname: String }
-    #[derive(Deserialize, Debug)] struct BeanstalkPayload { channel: String, session: Option<serde_json::Value>, payload: Option<serde_json::Value>, params: Option<serde_json::Value> }
+    #[derive(Deserialize, Debug)] struct BeanstalkPayload { channel: String, session: Option<serde_json::Value>, payload: Option<serde_json::Value>, params: Option<serde_json::Value>, options: Option<serde_json::Value>, }
 }
