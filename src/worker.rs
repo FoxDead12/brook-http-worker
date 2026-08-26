@@ -7,10 +7,12 @@ pub mod job {
     pub struct Job<'a> {
         pub id: u64,
         pub channel: String,
+        pub method: String,
         pub payload: Option<serde_json::Value>,
         pub params: Option<serde_json::Value>,
         pub session: Option<serde_json::Value>,
         pub options: Option<serde_json::Value>,
+        pub file_path: Option<String>,
         pub beanstalkd: &'a mut Beanstalkc,
         pub redis: &'a mut Connection,
         pub postgres: &'a mut PostgresClient
@@ -159,10 +161,12 @@ pub mod worker {
                                     let context = Job {
                                         id,
                                         channel: data.channel,
+                                        method: data.method,
                                         payload: data.payload,
                                         params: data.params,
                                         session: data.session,
                                         options: data.options,
+                                        file_path: data.file_path,
                                         beanstalkd: &mut self.beanstalkd,
                                         redis: &mut self.redis,
                                         postgres: &mut self.postgres
@@ -193,5 +197,5 @@ pub mod worker {
     #[derive(Deserialize)] struct BeanstalkdConfig { host: String, port: u16 }
     #[derive(Deserialize)] struct RedisConfig { host: String, port: u16 }
     #[derive(Deserialize)] struct PostgresConfig { host: String, port: u16, user: String, password: String, dbname: String }
-    #[derive(Deserialize, Debug)] struct BeanstalkPayload { channel: String, session: Option<serde_json::Value>, payload: Option<serde_json::Value>, params: Option<serde_json::Value>, options: Option<serde_json::Value>, }
+    #[derive(Deserialize, Debug)] struct BeanstalkPayload { channel: String, method: String, session: Option<serde_json::Value>, payload: Option<serde_json::Value>, params: Option<serde_json::Value>, options: Option<serde_json::Value>, file_path: Option<String>, }
 }
